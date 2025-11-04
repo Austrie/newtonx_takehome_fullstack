@@ -362,16 +362,17 @@ If the API key isn't set, you'll get a graceful error:
 - Local file storage
 
 **Production Improvements:**
-1. **Async Processing**: Use Celery + Redis to queue parsing jobs
-2. **Cloud Storage**: Upload to S3/GCS instead of local filesystem
-3. **Batch Processing**: Accept multiple PDFs at once
-4. **Caching**: Cache parsing results to avoid re-processing
-5. **Webhooks**: Notify clients when parsing completes
-6. **Human Review**: Flag low-confidence fields for manual verification
-7. **Malware Scanning**: Scan uploaded files before processing
-8. **Rate Limiting**: Prevent abuse of the GPT endpoint
-9. **Cost Tracking**: Monitor OpenAI API usage and costs
-10. **Fallback**: Use PyPDF2 + regex if GPT fails
+1. **Structured JSON Mode**: Use OpenAI's structured output mode for guaranteed consistent JSON responses
+2. **Async Processing**: Use Celery + Redis to queue parsing jobs
+3. **Cloud Storage**: Upload to S3/GCS instead of local filesystem
+4. **Batch Processing**: Accept multiple PDFs at once
+5. **Caching**: Cache parsing results to avoid re-processing
+6. **Webhooks**: Notify clients when parsing completes
+7. **Human Review**: Flag low-confidence fields for manual verification
+8. **Malware Scanning**: Scan uploaded files before processing
+9. **Rate Limiting**: Prevent abuse of the GPT endpoint
+10. **Cost Tracking**: Monitor OpenAI API usage and costs
+11. **Fallback**: Use PyPDF2 + regex if GPT fails
 
 **Frontend Integration:**
 - Drag-and-drop upload zone
