@@ -146,3 +146,75 @@ class ProfessionalBulkUpsertView(APIView):
             "success": success,
             "failed": failed
         }, status=status.HTTP_200_OK)
+
+
+class ParseResumeWithGPTView(APIView):
+    """
+    POST /api/professionals/parse-resume - Parse a resume PDF using GPT-4
+
+    Accepts a PDF file upload and returns extracted professional information.
+    Requires OPENAI_API_KEY environment variable to be set.
+    """
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        """
+        Parse resume using GPT-4 and return extracted fields with confidence scores.
+        """
+        from .gpt_parser import parse_resume_with_gpt, is_gpt_parsing_available
+
+        # Check if GPT parsing is available
+        if not is_gpt_parsing_available():
+            return Response({
+                "error": "GPT-based resume parsing is not available",
+                "message": "OpenAI API key is not configured. Please set the OPENAI_API_KEY environment variable to enable this feature.",
+                "available": False
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        # Check if resume file was provided
+        resume_file = request.FILES.get('resume')
+        if not resume_file:
+            return Response({
+                "error": "No resume file provided",
+                "message": "Please upload a PDF file with the field name 'resume'"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate file type
+        if not resume_file.name.lower().endswith('.pdf'):
+            return Response({
+                "error": "Invalid file type",
+                "message": "Only PDF files are supported"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate file size (10MB limit)
+        if resume_file.size > 10 * 1024 * 1024:
+            return Response({
+                "error": "File too large",
+                "message": "Resume file must be under 10MB"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Parse the resume with GPT
+            result = parse_resume_with_gpt(resume_file)
+
+            return Response({
+                "success": True,
+                "data": result,
+                "message": "Resume parsed successfully"
+            }, status=status.HTTP_200_OK)
+
+        except ValueError as e:
+            # API key not configured or parsing error
+            return Response({
+                "error": "Configuration error",
+                "message": str(e),
+                "available": False
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        except Exception as e:
+            # Other errors (API errors, network issues, etc.)
+            print(f"[GPT PARSING ERROR] {str(e)}")
+            return Response({
+                "error": "Parsing failed",
+                "message": f"Failed to parse resume: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

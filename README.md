@@ -26,6 +26,45 @@ start-frontend.bat
 
 These scripts handle everything automatically - creating the virtual environment, installing dependencies, setting up the database, and starting the servers. Visit **http://localhost:5173** when both are running.
 
+## Running Tests
+
+I've created automated test scripts that handle all setup automatically:
+
+### Mac/Linux
+
+**Unit Tests** (run without servers):
+```bash
+# Run all unit tests (backend + frontend)
+./run-all-tests.sh
+
+# Run backend unit tests only
+./run-backend-tests.sh
+
+# Run frontend unit tests only
+./run-frontend-tests.sh
+```
+
+**Integration Tests** (require running backend server):
+```bash
+# Run integration tests only (requires backend running)
+./run-integration-tests.sh
+
+# Run ALL tests including integration tests
+# (Start backend first: ./start-backend.sh)
+./run-all-tests.sh --with-integration
+```
+
+**What the scripts do:**
+- Create virtual environments if needed
+- Install all dependencies automatically
+- Set up the database if needed
+- Run the complete test suite
+- Show a summary of results
+
+**Test types:**
+- **Unit tests**: Backend (Django) and Frontend (Vitest) - no server required
+- **Integration tests**: API endpoint tests from `/manual_tests` - require running backend server
+
 ## Project Structure
 
 ```
@@ -147,6 +186,50 @@ Response:
 }
 ```
 
+### Parse Resume with GPT
+**POST** `/api/professionals/parse-resume`
+- Parse a resume PDF using GPT-4o-mini
+- Returns extracted professional data with confidence scores
+- Requires `OPENAI_API_KEY` environment variable
+- Gracefully returns error if API key not configured
+
+Request (multipart/form-data):
+```bash
+curl -X POST http://localhost:8000/api/professionals/parse-resume \
+  -F "resume=@resume.pdf"
+```
+
+Success Response:
+```json
+{
+  "success": true,
+  "data": {
+    "full_name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+1 555 123 4567",
+    "company_name": "Tech Corp",
+    "job_title": "Senior Engineer",
+    "confidence": {
+      "full_name": 95,
+      "email": 100,
+      "phone": 90,
+      "company_name": 85,
+      "job_title": 88
+    }
+  },
+  "message": "Resume parsed successfully"
+}
+```
+
+Error Response (No API Key):
+```json
+{
+  "error": "GPT-based resume parsing is not available",
+  "message": "OpenAI API key is not configured. Please set the OPENAI_API_KEY environment variable to enable this feature.",
+  "available": false
+}
+```
+
 ## Features
 
 ### What's Working
@@ -182,62 +265,170 @@ class Professional:
 
 ## PDF Resume Processing
 
-### How It Works Right Now
+### How It Works
 
-I built in basic PDF processing capabilities, though they're not automatically invoked yet. Here's the flow:
+I implemented two approaches for resume processing:
 
-**File Upload**
-- Frontend sends the PDF via multipart/form-data
+**Option 1: Basic Storage (Always Available)**
+- Frontend sends PDF via multipart/form-data to `/api/professionals/`
 - Backend validates it (must be PDF, under 10MB)
 - File gets stored in `/backend/media/resumes/`
 - File path is saved in the database
+- Basic regex-based extraction utilities available in `pdf_utils.py` but not auto-triggered
 
-**Text Extraction** (available but not auto-triggered)
-- I wrote utilities in `pdf_utils.py` using PyPDF2
-- `extract_text_from_pdf()` pulls raw text from all pages
-- `extract_professional_info()` uses regex to find email, phone, and name
+**Option 2: GPT-4o Parsing (Requires API Key)**
+- Endpoint: `POST /api/professionals/parse-resume`
+- Upload PDF and get back structured data with confidence scores
+- Uses GPT-4o-mini for cost efficiency
+- PDF is converted to base64 and sent directly to OpenAI
+- Returns: full_name, email, phone, company_name, job_title + confidence scores (0-100)
 
-Right now the PDF is just stored. To enable auto-parsing, I'd need to hook up the extraction utilities in the view's `perform_create()` method.
+### Using the GPT Parser
 
-### How I'd Build This in Production
+The backend automatically loads environment variables from `backend/.env` using python-dotenv.
 
-If I were building this for real, here's what I'd do:
+**Setup (one-time):**
 
-**File Upload Pipeline:**
-1. Client uploads PDF through the React form
-2. POST to `/api/professionals/` with multipart/form-data
-3. Validate file type and size, scan for malware
-4. Upload to S3/GCS with a UUID filename
-5. Store the cloud URL in the database
-6. Trigger a background Celery job for parsing
+1. Copy the example file:
+```bash
+cd backend
+cp .env.example .env
+```
 
-**PDF Parsing Pipeline:**
-1. Queue the parsing job (don't block the API request)
-2. Use Apache Tika or AWS Textract for robust text extraction
-3. Send the extracted text to GPT-4 or Claude with a prompt like:
-   ```
-   Extract these fields from this resume: full_name, email, phone, company_name, job_title
-   ```
-4. The LLM returns structured data with confidence scores
-5. Auto-fill fields with >80% confidence
-6. Flag low-confidence fields for human review
-7. Notify the user when parsing completes
+2. Edit `backend/.env` and add your OpenAI API key:
+```bash
+# backend/.env
+OPENAI_API_KEY=sk-your-actual-api-key-here
+```
 
-**Frontend Enhancements I'd Add:**
+3. Restart the backend server to pick up the changes
+
+**Get an API Key:**
+- Sign up at https://platform.openai.com/
+- Go to https://platform.openai.com/api-keys
+- Create a new API key
+- Copy it to your `backend/.env` file
+
+**Alternative (temporary testing):**
+```bash
+# Set for current terminal session only
+export OPENAI_API_KEY="sk-..."
+python manage.py runserver 8000
+```
+
+Example request:
+```bash
+curl -X POST http://localhost:8000/api/professionals/parse-resume \
+  -F "resume=@resume.pdf"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "full_name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+1 555 123 4567",
+    "company_name": "Tech Corp",
+    "job_title": "Senior Engineer",
+    "confidence": {
+      "full_name": 95,
+      "email": 100,
+      "phone": 90,
+      "company_name": 85,
+      "job_title": 88
+    }
+  },
+  "message": "Resume parsed successfully"
+}
+```
+
+If the API key isn't set, you'll get a graceful error:
+```json
+{
+  "error": "GPT-based resume parsing is not available",
+  "message": "OpenAI API key is not configured. Please set the OPENAI_API_KEY environment variable to enable this feature.",
+  "available": false
+}
+```
+
+### How I'd Improve This for Production
+
+**Current Limitations:**
+- Synchronous processing (blocks the request)
+- No caching of parsing results
+- Single PDF at a time
+- Local file storage
+
+**Production Improvements:**
+1. **Async Processing**: Use Celery + Redis to queue parsing jobs
+2. **Cloud Storage**: Upload to S3/GCS instead of local filesystem
+3. **Batch Processing**: Accept multiple PDFs at once
+4. **Caching**: Cache parsing results to avoid re-processing
+5. **Webhooks**: Notify clients when parsing completes
+6. **Human Review**: Flag low-confidence fields for manual verification
+7. **Malware Scanning**: Scan uploaded files before processing
+8. **Rate Limiting**: Prevent abuse of the GPT endpoint
+9. **Cost Tracking**: Monitor OpenAI API usage and costs
+10. **Fallback**: Use PyPDF2 + regex if GPT fails
+
+**Frontend Integration:**
 - Drag-and-drop upload zone
-- Real-time upload progress bar
-- PDF preview after upload
-- Show extracted fields in editable form
-- Highlight low-confidence fields
-- Side-by-side view: PDF on left, extracted data on right
-- Bulk resume upload with batch processing
-- Download/replace/delete resume options
-
-The basic implementation uses PyPDF2 + regex which is fine for a prototype, but production would need either ML models (spaCy NER) or LLM-based extraction for 90%+ accuracy. Apache Tika handles complex PDFs better, and Tesseract OCR is needed for scanned documents.
+- Real-time parsing status indicator
+- Show extracted fields in editable form with confidence badges
+- Side-by-side view: PDF preview + extracted data
+- Bulk upload with progress tracking
+- Option to choose between basic storage or GPT parsing
 
 ## Testing
 
-I wrote some manual testing scripts to make it easy to populate and clear the database:
+The project includes comprehensive test coverage with automated test scripts:
+
+### Automated Unit Tests
+
+Run without requiring servers:
+
+```bash
+# Run all unit tests (backend + frontend)
+./run-all-tests.sh
+
+# Run backend unit tests only (28 Django tests)
+./run-backend-tests.sh
+
+# Run frontend unit tests only (5 Vitest tests)
+./run-frontend-tests.sh
+```
+
+**Test Coverage:**
+- **Backend (28 tests)**: Models, serializers, API endpoints, validation, upsert logic
+- **Frontend (5 tests)**: Utility functions for className merging
+
+### Integration Tests
+
+Test actual API endpoints (requires running servers):
+
+```bash
+# Start backend first
+./start-backend.sh  # In Terminal 1
+
+# Then run integration tests
+./run-integration-tests.sh  # In Terminal 2
+
+# Or run everything together
+./run-all-tests.sh --with-integration
+```
+
+**Integration tests include:**
+- All CRUD operations
+- Filtering by source
+- Bulk upsert with success/failure handling
+- Validation error cases
+- Before/after database state verification
+
+### Manual Testing Scripts
+
+For database management and manual API testing:
 
 ```bash
 # Add 25 sample professionals
@@ -246,7 +437,7 @@ I wrote some manual testing scripts to make it easy to populate and clear the da
 # Clear everything and start fresh
 ./manual_tests/clear_database.sh
 
-# Test all endpoints
+# Test all endpoints manually
 ./manual_tests/test_endpoints.sh
 ```
 

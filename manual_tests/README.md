@@ -87,6 +87,42 @@ clear_database.bat
 
 ---
 
+### 4. Test GPT Resume Parsing (`test_gpt_parsing.sh`)
+
+Tests the GPT-4o based resume parsing endpoint.
+
+**What it tests:**
+- Missing file validation
+- Non-PDF file rejection
+- File size validation
+- Graceful error when API key not configured
+- Endpoint accessibility
+
+**Usage:**
+```bash
+cd manual_tests
+chmod +x test_gpt_parsing.sh
+./test_gpt_parsing.sh
+```
+
+**With OpenAI API Key:**
+```bash
+# Set API key in backend environment
+export OPENAI_API_KEY="sk-..."
+./test_gpt_parsing.sh
+
+# Or test with actual resume
+curl -X POST http://localhost:8000/api/professionals/parse-resume \
+  -F "resume=@/path/to/resume.pdf"
+```
+
+**When to use:**
+- Verifying GPT parsing endpoint works correctly
+- Testing graceful error handling without API key
+- Validating file upload restrictions
+
+---
+
 ## Common Workflows
 
 ### Workflow 1: Demo with Full Database
