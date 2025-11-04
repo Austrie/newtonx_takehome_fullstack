@@ -1,0 +1,2 @@
+# Ignore any output logs from test runs
+*.log
